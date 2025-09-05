@@ -273,6 +273,75 @@ jnz jump_e_one</code></pre>
             for each nesting level of the switch statement.
         </p>
 
+
+        <p>
+            Now that I have control flow figured out, I've run into a new problem: there are no mnemonic for SUPER-CHIP
+            opcodes. My next task will be to figure out
+            what to call each instruction and how to efficiently store them in my program. After comparing the opcodes
+            to x86 instructions, I have come up with a decent
+            mnemonic system that goes one-to-one with each opcode in SUPER-CHIP. I could have gotten away with less, but
+            that is for another time.
+        </p>
+
+        <pre><code>clearStr: db "cls", 0xA, 0
+retStr: db "ret", 0xA, 0
+gotoStr: db "jmp %#04x", 0xA, 0
+callStr: db "call %#04x", 0xA, 0
+seStr: db "se V%d, %#04x", 0xA, 0
+sneStr: db "sne V%d, %#04x", 0xA, 0
+sevStr: db "sev V%d, %#04x", 0xA, 0
+ldiStr: db "ldi V%d, %#04x", 0xA, 0
+addStr: db "add V%d, %#04x", 0xA, 0
+movStr: db "mov V%d, V%d", 0xA, 0
+orStr: db "or V%d, V%d", 0xA, 0
+andStr: db "and V%d, V%d", 0xA, 0
+xorStr: db "xor V%d, V%d", 0xA, 0
+addvStr: db "addv V%d, V%d", 0xA, 0
+subvStr: db "subv V%d, V%d", 0xA, 0
+shrStr: db "shr V%d, 1", 0xA, 0
+shlStr: db "shl V%d, 1", 0xA, 0
+subnStr: db "subn V%d, V%d", 0xA, 0
+snevStr: db "snev V%d, V%d", 0xA, 0
+ldi16Str: db "ldi16 %#04x", 0xA, 0
+jpv0Str: db "jpv0 %#04x", 0xA, 0
+rndStr: db "rnd V%d", 0xA, 0
+drwStr: db "drw V%d V%d %#04x", 0xA, 0
+skpStr: db "skp V%d", 0xA, 0
+sknpStr: db "sknp V%d", 0xA, 0
+lddtStr: db "lddt V%d", 0xA, 0
+ldvtStr: db "ldv V%d", 0xA, 0
+ldkStr: db "ldk V%d", 0xA, 0
+ldstStr: db "ldst V%d", 0xA, 0
+addiStr: db "addi V%d", 0xA, 0
+ldfStr: db "ldf V%d", 0xA, 0
+bcdStr: db "bcd V%d", 0xA, 0
+storStr: db "stor", 0xA, 0
+loadStr: db "load", 0xA, 0
+rawStr: db "raw: %#04x", 0xA, 0</code></pre>
+
+        <p>
+            Above are all the 35 opcodes + a raw byte mnemonic for my disassembler. They are in the same order that the
+            opcodes are mentioned on the Chip-8 Wikipedia page. The last part of writing this disassembler is printing
+            out
+            each instrcution correclty, which thankfully is the easiest part
+        </p>
+
+        <pre><code>mov ecx, [x]
+push ecx
+push shlStr
+call _printf
+add esp, 0x8
+jmp jump_switch_end</code></pre>
+
+        <p>
+            Here is the disassembly for the shl instruction, 8XYE. First we move the precomputed x register identifier into ECX and push it to the stack.
+            Then we push the corresponding string to the stack, call printf, fix the stack and move on to the next iteration of the loop.
+        </p>
+
+        <p>
+            That's it! My Super-Chip disassembler is now complete and my x86 skills are yet again enhanced. For my next project, I will briefly move out of
+            the assembly language grind and write my own HTTP server simulator for reverse engineering malware that connects to an external server.
+        </p>
     </section>
     <script src="" async defer></script>
 </body>
