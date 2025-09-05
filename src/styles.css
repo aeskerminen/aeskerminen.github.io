@@ -1,0 +1,139 @@
+@import url('https://fonts.googleapis.com/css2?family=Bitcount+Grid+Double:wght@100..900&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background: #101010;
+    color: #fff;
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    min-height: 100vh;
+    height: 100vh;
+    width: 100vw;
+}
+.container {
+    max-width: 900px;
+    background: #101010;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+#banner-img {
+    width: 50%;
+    margin: auto;
+    display: block;
+    margin-top: 5rem;
+}
+
+.blog-date, .project-date {
+    display: block;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #B4362A;
+    margin-bottom: 0.5rem;
+    letter-spacing: 0.03em;
+}
+.blog-card h2, .project-card h2 {
+    font-size: 1.3rem;
+    font-weight: 900;
+    margin-bottom: 0.5rem;
+    color: #fff;
+}
+.blog-card p, .project-card p {
+    font-size: 1rem;
+    font-weight: 400;
+    color: #e0e0e0;
+    margin-bottom: 0;
+}
+
+.section {
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+}
+
+.section-title {
+    font-size: 2.2rem;
+    font-weight: 900;
+    margin-bottom: 2rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    text-align: left;
+}
+
+.blog-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+.blog-card {
+    display: block;
+    background: #181818;
+    border: 2px solid #B4362A;
+    border-radius: 1rem;
+    padding: 1.5rem 2rem;
+    text-decoration: none;
+    color: #fff;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+    transition: border 0.2s, box-shadow 0.2s;
+}
+.blog-card:hover {
+    border-color: #D94C3E;
+    box-shadow: 0 4px 24px rgba(212,76,62,0.15);
+}
+.blog-card h2 {
+    font-size: 1.3rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+}
+.blog-card p {
+    font-size: 1rem;
+    font-weight: 400;
+    margin-bottom: 0;
+}
+
+.projects-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 2rem;
+}
+.project-card {
+    background: #181818;
+    border: 2px solid #B4362A;
+    border-radius: 1rem;
+    padding: 1.5rem 2rem;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+    transition: border 0.2s, box-shadow 0.2s;
+}
+.project-card:hover {
+    border-color: #D94C3E;
+    box-shadow: 0 4px 24px rgba(212,76,62,0.12);
+}
+.project-card h2 {
+    font-size: 1.2rem;
+    font-weight: 800;
+    margin-bottom: 0.5rem;
+}
+.project-card p {
+    font-size: 1rem;
+    font-weight: 400;
+    margin-bottom: 0;
+}
+
+@media (max-width: 700px) {
+    .container {
+        padding: 1rem 0.5rem;
+    }
+    #banner-img {
+        max-width: 95vw;
+    }
+    .section-title {
+        font-size: 1.5rem;
+    }
+    .blog-card, .project-card {
+        padding: 1rem 1rem;
+    }
+}
+

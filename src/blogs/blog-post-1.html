@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title></title>
+    <meta name="description" content="">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="./blog-styles.css">
+</head>
+
+<body>
+    <section id="blog-content">
+        <section id="blog-title">
+            <div id="title-bar">
+                <h2>Learning assembly programming</h2>
+                <button><a href="../index.html">X</a></button>
+            </div>
+            <p>How I started with low-level programming and what I did to learn the basics of x86 assembly.</p>
+        </section>
+        
+        <p>After two years of being a cybersecurity and this year a sysadmin hobbyist, I have come to realize that I
+            never learnt a crucial cornerstone of hacking, which is an assembly language. Over the years I have
+            programmed C and C++, but never really thought about taking my skills to a respectable level. Hence why
+            I have just begun to learn x86 assembly.</p>
+
+        
+        <h2>What even is assembly language and why is it relevant?</h2>
+        
+        <p>
+            Going from top to bottom, we begin with “high-level” programming languages, such as Python and C++.
+            These languages are made to be readable to humans and to resemble that of natural language (not to be
+            confused with Natural Language Programming).
+        </p>
+        
+        <p>
+            Computers are unable to understand keywords such as <code>printf</code>, <code>main</code>,
+            <code>void</code>, and so forth. This is where a compiler comes in. The purpose of the compiler is to
+            turn the human readable source into computer readable machine code. For C, the process is roughly as
+            follows:
+        </p>
+        
+        <ul style="margin-left: 2rem;">
+            <li>First, the compiler pre-processes the code and removes all comments and expands macros, inserts
+                defines and expands header files.</li>
+            
+
+            <li>Next, it compiles the source into assembly level instructions.</li>
+            
+
+            <li>Then, an assembler turns the assembly code into machine code.</li>
+            
+
+            <li>Lastly, the linker either copies all linked code to a single file or adds the names of shared
+                libraries to the code.</li>
+        </ul>
+        
+        <p>
+            The important part here is the compilation into assembly code. Depending on your computer processor’s
+            architecture, the compiler either compiles the source code into <code>x86_64</code>, <code>arm64</code>,
+            <code>riscv64</code>, or any other CPU architecture. Virtually this code is one-to-one and can be
+            reverse engineered back into something that is logically same as the original. This is useful in
+            cybersecurity due to having the need to analyze malicious binaries and how they work, without having the
+            original source code available.
+        </p>
+        
+        <p>
+            Why did I specifically choose 32-bit x86 assembly? That is the version that I am most familiar with. In
+            addition, there are multiple great books and resources that cover reverse engineering and programming in
+            this format.
+        </p>
+        
+        <p>
+            I began learning assembly by reading the first few chapters of a book called <em>Practical Malware
+                Analysis</em>. The book has a great introduction to x86 assembly and to the basics of static and
+            dynamic analysis. I have yet to complete the more advanced chapters. After learning basic instructions
+            and paradigms, I began working on my own projects to get hands-on experience in how programming works at
+            this level.
+        </p>
+        
+        <h2>Hello World in Assembly</h2>
+        
+        <pre><code>global _main
+
+extern _printf ; add printf from stdlib
+
+section .data
+    message: db 'hello, world',0xA,0 ; allocate bytes for string
+
+section .bss
+section .text
+    _main:
+
+    push message ; push message string to stack as parameter
+    call _printf ; call printf from stdlib
+
+    add esp, 0x4 ; clear stack
+
+    ret ; return
+</code></pre>
+        
+        <p>
+            I could have used the Windows API, but decided to go for the easier way and use <code>printf</code> from
+            the C standard library. Due to developing on WSL2, I had to figure out how to compile the program to
+            Windows. I had already decided to use NASM as my assembler, so assembling to win32 was already figured
+            out. Next, I had to download mingw32, which is a set of tools for compiling to Windows. Specifically, I
+            used <code>mingw32-gcc</code> to link the object file into a Windows executable. GCC automatically links
+            the object file against the standard library.
+        </p>
+        
+        <pre><code>nasm -f win32 src/app.asm -o build/accumulate.obj \
+  && i686-w64-mingw32-gcc build/accumulate.obj -o main.exe \
+  && rm build/accumulate.obj</code></pre>
+        
+        <p>
+            This first exercise was a breeze and now I know the fundamentals of organizing the source file and
+            compiling it. I wanted to move on to something more complex and decided to write a simple calculator. It
+            would take three arguments: two operands and one operator.
+        </p>
+        
+        <h2>Building a Simple Calculator</h2>
+        
+        <p>
+            First, I had to read the command line arguments given to the program. Due to the structure of the stack
+            frame, argv is offset by 8 bytes in the stack at the beginning of the main entrypoint. Argc is set at 4
+            bytes and the return address is set at the base.
+        </p>
+        
+        <pre><code>mov eax, [esp + 8]      ; load argv 
+mov ebx, [eax + 1 * 4]  ; 1st arg
+mov esi, [eax + 3 * 4]  ; 3rd arg
+mov edi, [eax + 2 * 4]  ; 2nd arg </code></pre>
+        
+        <p>
+            I load the array of pointers into <code>EAX</code>. After this, I load the actual arguments into
+            <code>EBX</code>, <code>ESI</code>, and <code>EDI</code>, with their own offsets. Note that EBX and ESI
+            are the operands and EDI is the operator, e.g. <code>./app.exe 2 + 2</code>.
+        </p>
+        
+        <h3>Converting Strings to Integers</h3>
+        
+        <pre><code>push ebx
+call _atoi
+mov ebx, eax
+add esp, 0x4
+
+push esi
+call _atoi
+mov esi, eax
+add esp, 0x4</code></pre>
+        
+        <p>I used <code>atoi</code> from the C standard library to convert the strings into integers, reusing the
+            same registers.</p>
+        
+        <pre><code>mov al, byte [edi] ; move first byte of the value that edi points to, to al.
+; check operator
+cmp al, '+'
+jnz sub_cmp
+push eax
+push ebx
+push esi
+call add_two
+add esp, 0xC
+mov ebx, eax
+mov eax, [esp]
+jmp print_res</code></pre>
+        
+        <p>
+            Next, I handle the logic for checking which operator the user wrote. I move the first character from EDI
+            into AL so that I can use <code>cmp</code> to compare it to all the different one-byte operators. I save
+            EAX into the stack and push the two arguments EBX and ESI into the function. After the call, I fix the
+            stack, save the result and restore EAX from the stack.
+        </p>
+        <h3>add_two function</h3>
+        
+        <pre><code>add_two:
+    push ebp
+    mov ebp, esp
+    mov eax, [ebp + 12]
+    mov ecx, [ebp + 8]
+    add eax, ecx
+    pop ebp
+    ret</code></pre>
+        
+        <p>
+            This function adds two registers, saves the result in EAX and returns. <strong>NOTE!</strong>
+            Unfortunately, my programs do not follow any standard calling paradigm like <code>stdcall</code> or
+            <code>cdecl</code>. I will take this into consideration in my next projects.
+        </p>
+        
+        <p>
+            Finally, the function returns and jumps to the last part of <code>_main</code> and prints the result out
+            to the user.
+        </p>
+        
+        <h2>What’s Next?</h2>
+        
+
+        <p>
+            This was the start of my assembly learning project. Next, I am planning to write utility functions, like
+            <code>strcmp</code>, <code>strlen</code> and <code>atoi</code> in assembly. In addition, I am looking
+            forward to writing an actual, working, GUI app, which I presume will require plenty of writing and
+            smacking my head into a wall.
+        </p>
+        <br>
+    </section>
+    <script src="" async defer></script>
+</body>
+
+</html>

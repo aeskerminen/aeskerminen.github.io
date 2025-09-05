@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title></title>
+    <meta name="description" content="">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="./blog-styles.css">
+</head>
+
+<body>
+    <section id="blog-content">
+        <section id="blog-title">
+            <div id="title-bar">
+                <h2>How I opened a window in x86 assembly...</h2>
+                <button><a href="../index.html">X</a></button>
+            </div>
+            <p>This time around, I learned how to open a window using the Windows API.</p>
+        </section>
+        
+        <p>After learnings the basics of
+            x86, I decided that I wanted to move onto something more complex. Making GUIs is a core part of desktop
+            software development and having knowledge of how it is done with the Windows API, especially in assembly,
+            feels like a natural progression to me.</p>
+
+        <h2>How does creating a window even work in the WinAPI?</h2>
+        
+        <p>First, every window must be associated with a window class, which is a data structure that is used internally
+            by the operating system. In this case, we are using the WNDCLASSEXA structure, which looks like this:</p>
+        
+            <pre><code>typedef struct tagWNDCLASSEXA {
+    UINTcbSize;
+    UINTstyle;
+    WNDPROClpfnWndProc;
+    intcbClsExtra;
+    intcbWndExtra;
+    HINSTANCEhInstance;
+    HICONhIcon;
+    HCURSORhCursor;
+    HBRUSHhbrBackground;
+    LPCSTRlpszMenuName;
+    LPCSTRlpszClassName;
+    HICONhIconSm;
+} WNDCLASSEXA, *PWNDCLASSEXA, *NPWNDCLASSEXA, *LPWNDCLASSEXA;
+</code></pre>
+        
+            <p>It contains data about the size of the struct, window styling, the cursor and the icon, the window procedure
+            and the HINSTANCE.</p>
+
+            <p>Even though it contains multiple variables, for a simple window, only cbSize, lpfnWndProc, hInstance, and
+            lpszClassName are required. cbSize contains the size of the struct, lpfnWndProc is a pointer to the window
+            procedure function that we will define later, hInstance is a handle to the application instance and
+            lpszClassName is the unique name of the class. We can register the class using RegisterClassExA and passing
+            a pointer to the struct.</p>
+
+        <p>After the class has been registered, we can move on to creating the window using the CreateWindowEx function.
+        </p>
+        <pre><code>HWND CreateWindowExA(
+    [in]DWORDdwExStyle,
+    [in, optional]LPCSTRlpClassName,
+    [in, optional]LPCSTRlpWindowName,
+    [in]DWORDdwStyle,
+    [in]intX,
+    [in]intY,
+    [in]intnWidth,
+    [in]intnHeight,
+    [in, optional]HWNDhWndParent,
+    [in, optional]HMENUhMenu,
+    [in, optional]HINSTANCEhInstance,
+    [in, optional]LPVOIDlpParam
+);
+</code></pre>
+
+        <p>The function takes in multiple parameters, which define how the window will look when the program is running.
+            Most important to us are the lpClassName, lpWindowName, X, Y, nWidth, nHeight, and hInstance variables,
+            which all must be defined for the window to look presentable. If successful, the function returns a handle
+            to the window.</p>
+
+        <p>Lastly, we must call ShowWindow, for the window to be renderer.</p>
+
+<pre><code>BOOL ShowWindow(
+    [in] HWND hWnd,
+    [in] int nCmdShow
+);</code></pre>
+  
+        <p>The function takes a handle to the window and a parameter nCmdShow. The latter takes in an integer value
+            which controls how the window is shown. For our purposes, we can use the value 0x1, or SW_SHOWNORMAL. That
+            makes the window show up exactly how we defined it in the CreateWindowEx function.</p>
+
+        <p>Although we technically have a window that shows up, the program will terminate exactly after the ShowWindow
+            call, and no GUI will be visible to the user. This is why we need to implement the Message Loop, which
+            handles all events that happen in the window, including keyboard and mouse input, as well as drawing sub
+            windows, such as buttons, or painting polygons, such as rectangles.</p>
+        <p>The operating systems creates a queue for each thread that creates a window. The queue holds all messages
+            that are created on that thread. GetMessage is used to pull messages from the queue. The function stores the
+            message in a message struct, the address of which is passed to the function.</p>
+
+<pre><code>typedef struct tagMSG {
+    HWND hwnd;
+    UINT message;
+    WPARAM wParam;
+    LPARAM lParam;
+    DWORD time;
+    POINT pt;
+    DWORD lPrivate;
+} MSG, *PMSG, *NPMSG, *LPMSG;
+ </code></pre>
+
+<pre><code>BOOL GetMessage(
+    [out]LPMSG lpMsg,
+    [in, optional]HWND hWnd,
+    [in]UINT wMsgFilterMin,
+    [in]UINT wMsgFilterMax
+);</code></pre>
+
+        <p>The message struct will be passed down to two other functions: TranslateMessage, and DispatchMessage.
+            Translate message translates keystrokes into characters and DispatchMessage tells the OS to call the window
+            procedure of the window that is the target of the message.</p>
+
+        <p>Lastly, we need to define the Window Procedure that the DispatchMessage will forward the messages to.</p>
+
+<pre><code>LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);</code></pre>
+
+        <p>The function typically contains a switch statement that handles every different message type. If you don’t
+            handle a certain message type in your window, you can pass it to DefWindowProc, which executes the default
+            behavior for any action.</p>
+
+<pre><code>return DefWindowProc(hwnd, uMsg, wParam, lParam);</code></pre>
+
+        <h2>Okay, all this is cool, but how do I write it in x86? Well, let’s start.</h2>
+        <p>We begin by defining the WNDCLASSEX struct and a class name for our window class.</p>
+
+<pre><code>section .data
+    className: db "my_class", 0
+    wc: ; WndClassEX
+        dd 48 ; cbSize
+        dd CS_HREDRAW | CS_VREDRAW | CS_BYTEALIGNWINDOW ; style
+        dd WindowProc ; lpfnWndProc
+        dd NULL; cbClsExtra
+        dd NULL; cbWndExtra
+        dd 0 ; hInstance
+        dd 0 ; hIcon
+        dd 0 ; hCursor
+        dd COLOR_WINDOW + 1 ; hbrBackground
+        dd 0 ; lpszMenuName
+        dd className ; lpszClassName
+        dd 0 ; hIconSm
+</code></pre>
+
+        <p>We use define bytes to allocate the string className. Then, we use a label wc for the WNDCLASSEX. We define
+            each variable that the struct takes. As you can see, I have defined some constants in my asm file to make
+            the structure of my program clearer.</p>
+        <p>Interestingly, in NASM, you can use dd and a label to a function (e.g. WindowProc) to pass the pointer of
+            that function into the double word, and in this case, into the lpfnWndProc parameter.</p>
+        <p>If you remember, the hInstance parameter is mandatory, but we don’t have the handle ready.</p>
+
+<pre><code>push NULL
+call _GetModuleHandleA@4 
+mov [wc + 20], eax
+mov [hInstance], eax
+</code></pre>
+        <p>We use the function GetModuleHandleA to retrieve the handle to the current application process. We can easily
+            move the return value from EAX to the address in wc offset by 20 bytes, which points to hInstance. We also
+            store hInstance permanently in hInstance, which is a memory reserved in the .bss section.</p>
+
+<pre><code>lea eax, [wc]
+push eax
+call _RegisterClassExA@4
+</code></pre>
+        
+        <p>Now that we are done modifying wc, we can load its address into EAX and push it to the stack. Now we can
+            register the class we have just made by calling RegisterClassExA.</p>
+
+<pre><code>push NULL ; lpParam
+push dword [hInstance] ; hInstance
+push NULL ; hMenu
+push NULL ; hWndParent
+push 500 ; height
+push 500 ; width
+push CW_USEDEFAULT ; yPos
+push CW_USEDEFAULT ; xPos
+push WS_OVERLAPPEDWINDOW ; dwStyle
+push windowName ; windowName
+push className ; className
+push WS_EX_COMPOSITED ; extended windows style
+
+call _CreateWindowExA@48 ; handle to window in EAX
+mov [hWnd], eax ; store handle to window permanently
+</code></pre>
+
+        <p>We push all the parameters required by CreateWindowEx into the stack and call the function. The function
+            returns a handle to the window – we store that in a local variable called hWnd, defined by:</p>
+
+<pre><code>1.%define hWnd EBP - 4</code></pre>
+
+        <p>Now that we have the window, we can call ShowWindow to render it.</p>
+        
+<pre><code>
+push SW_SHOWNORMAL
+push dword [hWnd]
+call _ShowWindow@8
+</code></pre>
+
+        <p>So, now we have a window and a handle to the window. Our last steps are to create the message loop and the
+            window procedure to handle all inbound messages.</p>
+        <p>In my main function I have reserved space in the stack for 32 bytes of local variables, including the hWnd
+            shown in the previous step.</p>
+
+<pre><code>push EBP
+mov EBP, ESP
+sub ESP, 32
+
+%define msg EBP - 32
+%define msg.hwnd EBP - 32
+%define msg.message EBP - 28
+%define msg.wParam EBP - 24
+%define msg.lParam EBP - 20
+%define msg.time EBP - 16
+%define msg.pt.x EBP - 12
+%define msg.pt.y EBP - 8
+</code></pre>
+
+        <p>I define the MSG struct as byte offset from the EBP, which is the base pointer of the stack. I can now refer
+            to the location with, for example, [msg]. Next we define the message loop and call the functions as I
+            described earlier.</p>
+
+<pre><code>.MessageLoop:
+    lea EAX, [msg]
+    push NULL
+    push NULL
+    push NULL
+    push EAX
+    call _GetMessageA@16
+    cmp EAX, 0
+    je _end
+
+    lea EAX, [msg]
+    push EAX
+    call _TranslateMessage@4
+
+    lea EAX, [msg]
+    push EAX
+    call _DispatchMessageA@4
+    jmp .MessageLoop
+</code></pre>
+
+        <p>Now for the last step before we have a working window, we must define the WindProc function.</p>
+        <p>First, we set up the stack frame correctly to be able to retrieve the four parameters that are passed to this
+            function.</p>
+        
+<pre><code>push EBP
+mov EBP, ESP
+
+%define hWnd EBP + 8
+%define uMsg EBP + 12
+%define wParam EBP + 16
+%define lParam EBP + 20
+</code></pre>
+
+<p>For the sake of simplicity, we will only prepare two cases for the switch statement: WM_DESTROY and the
+            default case.</p>
+
+<pre><code>cmp dword [uMsg], WM_DESTROY
+je WMDESTROY
+</code></pre>
+
+        <p>This code block either jumps into the WMDESTROY label, or continues over to the default function.</p>
+        
+<pre><code>WMDESTROY:
+    push NULL
+    call _PostQuitMessage@4
+    jmp _WM_PROCESSED
+</code></pre>
+
+        <p>We call PostQuitMessage and jump to the end of WindProc.</p>
+
+<pre><code>DefaultMessage:
+    push dword [lParam] ; [EBP + 20]
+    push dword [wParam] ; [EBP + 16]
+    push dword [uMsg] ; [EBP + 12]
+    push dword [hWnd] ; [EBP + 8]
+    call _DefWindowProcA@16
+
+    mov ESP, EBP
+    pop EBP
+    ret 16
+</code></pre>
+        <p>In the default case, we push the parameters forward to the DefWindowProc function and restore the stack. We
+            restore the stack inside the function due to WindProc being a WinAPI function and following the stdcall
+            paradigm.</p>
+
+<pre><code>_WM_PROCESSED:
+    xor EAX, EAX
+    mov ESP, EBP
+    pop EBP
+    ret 16
+</code></pre>
+
+        <p>At the end of WindProc, we make sure to return 0 (EAX), remove the stack frame and pop the parameters off.
+        </p>
+
+        <h2>Thats it!</h2>
+        <p>We have successfully created an x86 assembly program that opens up a window and has a working message loop.
+        </p>
+
+        <h2>What’s next?</h2>
+        <p>I honestly don’t know yet. I might continue with creating my own assembly programs, move on to reverse
+            engineering or do something completely different.</p>
+        <br>
+    </section>
+    <script src="" async defer></script>
+</body>
+
+</html>

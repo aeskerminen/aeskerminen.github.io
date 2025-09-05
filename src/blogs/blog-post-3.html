@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title></title>
+    <meta name="description" content="">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="./blog-styles.css">
+</head>
+
+<body>
+    <section id="blog-content">
+        <section id="blog-title">
+            <div id="title-bar">
+                <h2>Writing a disassembler in assembly...</h2>
+                <button><a href="../index.html">X</a></button>
+            </div>
+            <p>Opening a windows was way too easy (not), so I decided to write a disassembler for SUPER-CHIP.</p>
+        </section>
+
+        <p>
+            After learning the basics and even opening a window (WOAH!), I felt like I needed to do something actually
+            cool and useful. That is why I decided on writing one for the SUPER-CHIP platform.
+            In previous years I have made a SUPER-CHIP emulator, so I'm not coming into this project
+            completely empty handed, but it will definitely be a journey.
+        </p>
+
+        <p>
+            I began by figuring out how to read a file to a buffer, quite an essential step for the flow
+            of the disassembler, as I have to read bytes from a source file in order to output the disassembly.
+            Reading a full file to a buffer is usually done in C by first opening a file stream, inquiring the
+            length of the file in bytes, then dynamically allocating a buffer on the heap and reading the file
+            byte by byte into memory.
+        </p>
+
+        <pre><code>fopen -> fseek -> ftell -> rewind -> malloc -> fread -> fclose</code></pre>
+
+        <p>
+            Doing this is fairly simple in assembly. First, I began by reserving space in the bss section for three
+            double
+            words: the FILE pointer, the buffer (char*), and the filesize. These are useful for avoiding complex
+            spinning around
+            of registers and also persistence in the program.
+        </p>
+
+        <pre><code>; readSourceFile(char* SOURCE_URL)
+readSourceFile:
+    push ebp
+    mov ebp, esp
+    mov eax, [ebp + 8] ; move SOURCE_URL to EAX
+
+    ; open stream
+    push readMode
+    push eax
+    call _fopen 
+    add esp, 0x8
+    mov [filePointer], eax
+
+    ; get file size
+    push 0x2
+    push 0x0
+    mov eax, [filePointer]
+    push eax
+    call _fseek
+    add esp, 0xC
+
+    mov eax, [filePointer]
+    push eax
+    call _ftell
+    add esp, 0x4
+    mov [fileSize], eax
+    
+    mov eax, [filePointer]
+    push eax
+    call _rewind
+    add esp, 0x4
+
+    ; allocate space on the heap for buffer
+    mov eax, [fileSize]
+    inc eax
+    push eax
+    call _malloc
+    add esp, 0x4
+    mov [fileBuffer], eax
+
+    ; read source into buffer
+    mov eax, [filePointer]
+    push eax
+    mov eax, [fileSize]
+    push eax
+    push 1
+    mov eax, [fileBuffer]
+    push eax
+    call _fread
+    add esp, 0x10
+
+    ; null terminator
+    mov eax, [fileSize]
+    add eax, [fileBuffer]
+    mov [eax], byte 0x00
+
+    ; close file
+    mov eax, [filePointer]
+    push eax
+    call _fclose
+    add esp, 0x4
+
+    mov esp, ebp
+    pop ebp
+ret</code></pre>
+
+        <p>
+            While writing the above function, I ran into something that messed with my brain for a while. When opening
+            the file
+            with fopen, the function returns a pointer to the start of the buffer, which is stored in EAX. Logically, I
+            move this
+            pointer into the location reserved in the bss section with <code>mov [filePointer], eax</code>. The thing
+            is, when I
+            want to use the pointer stored in filePointer, I have to use <code>[filePointer]</code> instead of just
+            <code>filePointer</code>.
+            This may seem obvious (and it is), but the fact that there is a kind of double pointer at work messed with
+            my logic for a while, before
+            realizing what the issue was.
+        </p>
+
+        <p>
+            Now that we have the source file read into a buffer in memory, we have to setup the loop for iterating the
+            buffer
+            and the local variables that are needed to parse the two-byte opcodes.
+        </p>
+
+        <pre><code>sub esp, 24 ; space for 6 local variables
+
+%define opcode ebp - 4
+%define x ebp - 8
+%define y ebp - 12
+%define nnn ebp - 16
+%define nn ebp - 20
+%define n ebp - 24</code></pre>
+
+        <p>
+            First, I subtract the amount of bytes needed from the current stack pointer (remember, arguments are stored
+            in higher addresses,
+            as the stack grows downwards - therfore we store local variables in lower addresses). The SUPER-CHIP opcodes
+            consist of a few
+            variables and some fixed bytes. The data is encoded in opcodes as follows:
+
+        <ul>
+            <li>NNN: a 12-bit address</li>
+            <li>NN: an 8-bit constant</li>
+            <li>N: a 4-bit constant</li>
+            <li>X and Y: 4-bit register identifiers</li>
+        </ul>
+
+        This standard way of evaluating the opcodes is crucial for parsing a source file and finally disassembling it.
+        </p>
+
+        <p>
+            Now begins the fun part: reading the opcodes two bytes at a time from the buffer and using bit arithmetics
+            to
+            retrieve the correct variables from the opcodes.
+        </p>
+
+        <pre><code>; get the array pointer
+mov eax, [fileBuffer]
+
+; read two bytes from the array and combine them
+movzx ebx, byte [eax+esi] ; h
+shl ebx, 0x8
+movzx ecx, byte [eax+esi+1] ; l
+or ebx, ecx
+
+; store the opcode
+mov [opcode], ebx</code></pre>
+
+        <p>
+            First, we fetch the pointer to the array. Then we move two sequential bytes from the buffer using the
+            base pointer EAX and the offset ESI, which works as a program counter in the loop (until it hits the file
+            length).
+            <br>
+            <br>
+            But why <code>movzx</code>? In x86, the registers are 32-bit, but in our case, we are only reading a single
+            byte
+            from the specified memory location. This means that we have to let the CPU know what to do with the other 3
+            bytes.
+            In the case of <code>movzx</code>, it will zero-extend the register, i.e. set the remaining high-bits to
+            zeroes.
+            In this way, we will have no garbage data left in the register and the bitshift operation will be complete
+            successfully.
+            <br>
+            <br>
+            Finally, we OR the registers together and get the final opcode. NOTE! Chip-8 is big-endian, so higher bits
+            are stored in
+            lower addresses, like you can see from the code.
+        </p>
+
+        <pre><code>; X
+mov eax, [opcode]
+and eax, 0x0F00
+shr eax, 8
+mov [x], eax
+
+; Y
+mov eax, [opcode]
+and eax, 0x00F0
+shr eax, 4
+mov [y], eax
+            
+; NNN
+mov eax, [opcode]
+and eax, 0x0FFF
+mov [nnn], eax
+
+; NN
+mov eax, [opcode]
+and eax, 0x00FF
+mov [nn], eax
+
+; N
+mov eax, [opcode]
+and eax, 0x000F
+mov [n], eax</code></pre>
+
+        <p>
+            We do more bit arithmetics and store the rest of the variables in their respective variables for the
+            disassembly.
+            Basically, we zero-out everything else except the variable itself in the opcode and bit shift it to be
+            contained in
+            the least significant bits possible.
+        </p>
+
+        <p>
+            The hard past is now over. Next comes the tedious part, where I have to program a huge switch statement with
+            a branch
+            for each opcode. In addition, I will have to figure out a naming scheme for the opcodes and a way to print
+            them to the
+            console.
+        </p>
+
+        <p>
+            I structured the control flow as follows:
+            First, I check the first 4 bits of the opcode, due to the scheme having the first 4 bits as a fixed number
+            from 0 to F.
+            In some cases, such as for 1, 2, 3, and 4, there are no subcases. But for numbers such as 8 and 0xF, there
+            are multiple
+            subcases, which can be handled by comparing latter bits, such as the last four (n) or eight (nn) bits.
+        </p>
+
+        <pre><code>; compare first byte
+mov eax, [opcode]
+and eax, 0xF000
+
+cmp eax, 0x0000
+jnz jump_one</code></pre>
+
+        <pre><code>; compare last byte
+mov ebx, [opcode]
+and ebx, 0x000F
+
+cmp ebx, 0x0000
+jnz jump_one_one</code></pre>
+
+        <pre><code>; compare nn
+mov ebx, [nn]
+cmp ebx, 0x009E
+jnz jump_e_one</code></pre>
+
+        <p>
+            I will not cover the whole control flow, and will leave those three code snippets as examples. There is also
+            a default case
+            for each nesting level of the switch statement.
+        </p>
+
+    </section>
+    <script src="" async defer></script>
+</body>
+
+</html>
